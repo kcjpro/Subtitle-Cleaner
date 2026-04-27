@@ -1,0 +1,14 @@
+# --- Required runtime deps for the slim subtitle-only build ---
+# This is what the bundled .exe ships with.
+PySide6>=6.6.0
+
+# Video playback. Requires VLC installed system-wide on the target machine
+# (https://www.videolan.org/). python-vlc just binds to it.
+python-vlc>=3.0.20
+
+# --- Optional ---
+# Audio transcription via faster-whisper.
+# DO NOT install when building the .exe — it pulls in ctranslate2 + onnxruntime
+# (~350 MB) and makes packaging fragile.
+# To enable transcription in source mode only:
+#   pip install -r requirements-whisper.txt

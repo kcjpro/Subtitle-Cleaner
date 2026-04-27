@@ -1,0 +1,33 @@
+# Blasphemy / religious profanity
+# One word or short phrase per line. Lines starting with # are ignored.
+# Matching is case-insensitive and uses word boundaries.
+# Edit freely to fit your standards.
+
+god damn
+goddamn
+goddamned
+goddammit
+god dammit
+jesus christ
+jesus h christ
+holy christ
+holy hell
+oh my god
+omg
+oh god
+swear to god
+for christ's sake
+for christsake
+for god's sake
+for fucks sake
+hell no
+hell yes
+go to hell
+what the hell
+what in the hell
+the hell
+damn it
+dammit
+damnit
+damn
+damned

@@ -1,0 +1,67 @@
+# Sexual / explicit references
+# One word or short phrase per line. Lines starting with # are ignored.
+# Matching is case-insensitive and uses word boundaries.
+
+sex
+sexy
+sexual
+sexually
+horny
+naked
+nude
+nudity
+boobs
+boob
+tits
+titties
+nipple
+nipples
+breast
+breasts
+ass cheeks
+buttcheeks
+butt
+booty
+pussy
+vagina
+penis
+balls
+testicles
+erection
+orgasm
+climax
+masturbate
+masturbating
+masturbation
+jerking off
+jerk off
+hand job
+handjob
+blow job
+blowjob
+oral sex
+anal
+anal sex
+porn
+pornography
+slut
+whore
+hooker
+prostitute
+hump
+humping
+screw
+screwing
+get laid
+make love
+making love
+fondle
+fondling
+foreplay
+make out
+making out
+strip
+stripping
+striptease
+condom
+viagra

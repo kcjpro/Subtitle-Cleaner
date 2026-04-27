@@ -1,0 +1,118 @@
+# Build the SubtitleCleaner Windows installer in the cloud.
+#
+# Triggers:
+#   - Every push to main / master
+#   - Manual run from the Actions tab (workflow_dispatch)
+#   - Every published release (also attaches the installer to the release)
+#
+# Result:
+#   - SubtitleCleaner-Setup.exe (the one-click installer) uploaded as an artifact
+#   - SubtitleCleaner-Portable folder (the unwrapped bundle) uploaded as an artifact
+#
+# Find both under the workflow run page once it finishes.
+
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write    # needed to attach files to a release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      # python-vlc imports cleanly without VLC installed (it lazy-loads
+      # libvlc only when you actually call vlc.Instance()), so we don't
+      # install VLC on the runner. The installer carries VLC's own
+      # installer for the END USER's machine, which is what matters.
+
+      - name: Download VLC + ffmpeg into installer/deps
+        shell: pwsh
+        run: |
+          ./installer/download_deps.ps1
+
+      - name: Mirror ffmpeg into build/bin so the spec bundles it
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build/bin | Out-Null
+          Copy-Item installer/deps/ffmpeg.exe  build/bin/ffmpeg.exe  -Force
+          Copy-Item installer/deps/ffprobe.exe build/bin/ffprobe.exe -Force
+
+      - name: Run PyInstaller
+        working-directory: build
+        run: |
+          python -m PyInstaller --noconfirm --clean --log-level=WARN SubtitleCleaner.spec
+
+      - name: Verify bundle exists
+        shell: pwsh
+        run: |
+          $exe = 'build/dist/SubtitleCleaner/SubtitleCleaner.exe'
+          if (-not (Test-Path $exe)) {
+              throw "PyInstaller did not produce $exe"
+          }
+          Write-Host "Bundle size:"
+          Get-ChildItem 'build/dist/SubtitleCleaner' -Recurse -File |
+              Measure-Object Length -Sum |
+              ForEach-Object { '{0:N1} MB' -f ($_.Sum / 1MB) }
+
+      - name: Ensure data/profiles directory ships in the bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path 'build/dist/SubtitleCleaner/data/profiles' | Out-Null
+
+      - name: Compile Inno Setup installer
+        shell: cmd
+        run: |
+          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" installer\SubtitleCleaner.iss
+
+      - name: Show installer size
+        shell: pwsh
+        run: |
+          $setup = 'installer/Output/SubtitleCleaner-Setup.exe'
+          if (-not (Test-Path $setup)) { throw "Inno Setup did not produce $setup" }
+          $sizeMB = (Get-Item $setup).Length / 1MB
+          Write-Host ("Installer: {0:N1} MB" -f $sizeMB)
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubtitleCleaner-Setup
+          path: installer/Output/SubtitleCleaner-Setup.exe
+          if-no-files-found: error
+
+      - name: Upload portable bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubtitleCleaner-Portable
+          path: build/dist/SubtitleCleaner/
+          if-no-files-found: error
+
+      - name: Attach installer to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/SubtitleCleaner-Setup.exe

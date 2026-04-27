@@ -1,0 +1,38 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+.build-env/
+
+# --- PyInstaller output ---
+build/build/
+build/dist/
+build/pyinstaller.log
+build/bin/ffmpeg.exe
+build/bin/ffprobe.exe
+
+# --- Installer build deps + output (auto-downloaded; can be huge) ---
+installer/deps/vlc-installer.exe
+installer/deps/ffmpeg.exe
+installer/deps/ffprobe.exe
+installer/deps/*.zip
+installer/Output/
+
+# --- Generated filter profiles (per-user data, not source) ---
+data/profiles/*.json
+
+# --- IDE / editor scratch ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

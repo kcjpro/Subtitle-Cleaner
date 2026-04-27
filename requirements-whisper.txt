@@ -1,0 +1,8 @@
+# Optional: enables audio transcription in SOURCE MODE only.
+# Don't install this in the same Python env you build the .exe from —
+# PyInstaller's spec excludes it, but installing it just wastes disk space
+# and slows the analysis pass.
+#
+# Install with:
+#   pip install -r requirements-whisper.txt
+faster-whisper>=1.0.0

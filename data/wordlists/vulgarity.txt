@@ -1,0 +1,46 @@
+# Vulgarity / general profanity
+# One word or short phrase per line. Lines starting with # are ignored.
+# Matching is case-insensitive and uses word boundaries.
+
+fuck
+fucking
+fucked
+fucker
+fuckers
+fuckin
+motherfucker
+motherfucking
+mofo
+shit
+shitty
+shithead
+shitfaced
+bullshit
+horseshit
+batshit
+bitch
+bitches
+bitching
+bastard
+bastards
+asshole
+assholes
+ass
+asses
+arse
+arsehole
+piss
+pissed
+pissing
+crap
+crappy
+cock
+prick
+dick
+dickhead
+douche
+douchebag
+freaking
+fricking
+friggin
+freakin

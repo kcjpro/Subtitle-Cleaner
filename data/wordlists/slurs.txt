@@ -1,0 +1,18 @@
+# Slurs (racial, ethnic, homophobic, ableist, etc.)
+# One word or short phrase per line. Lines starting with # are ignored.
+# This list intentionally starts conservative; add or edit per your needs.
+# Matching is case-insensitive and uses word boundaries.
+
+retard
+retarded
+fag
+faggot
+faggy
+queer
+dyke
+tranny
+spaz
+spastic
+midget
+cripple
+gimp
