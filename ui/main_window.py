@@ -159,6 +159,7 @@ class MainWindow(QMainWindow):
                 f"Saved profile: {n}/{len(self._profile.flags)} flags enabled.",
                 6000,
             )
+            self._player.play()
 
     def _show_about(self) -> None:
         QMessageBox.about(

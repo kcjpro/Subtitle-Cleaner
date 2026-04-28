@@ -63,6 +63,14 @@ class PlayerWidget(QWidget):
         self._position_slider.sliderReleased.connect(self._on_slider_released)
         self._scrubbing = False
 
+        self._sub_btn = QPushButton("CC")
+        self._sub_btn.setFixedWidth(40)
+        self._sub_btn.setCheckable(True)
+        self._sub_btn.setChecked(True)
+        self._sub_btn.setToolTip("Toggle subtitles")
+        self._sub_btn.clicked.connect(self._toggle_subtitles)
+        self._subs_enabled = True
+
         self._mute_indicator = QLabel("")
         self._mute_indicator.setStyleSheet(
             "color: white; background: #b00020; padding: 2px 8px; border-radius: 4px;"
@@ -75,6 +83,7 @@ class PlayerWidget(QWidget):
         controls.addWidget(self._time_label)
         controls.addWidget(self._position_slider, stretch=1)
         controls.addWidget(self._mute_indicator)
+        controls.addWidget(self._sub_btn)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -86,6 +95,10 @@ class PlayerWidget(QWidget):
         self._user_muted = False    # admin's manual mute (TODO: hook a button)
         self._filter_muted = False  # set when an active flag is muting
         self._active_flag: Optional[Flag] = None
+        self._saved_volume: int = 100  # volume to restore after mute
+        # VLC's reported time runs slightly ahead of speaker output, which
+        # naturally gives us a small lead on muting. No artificial pre-roll needed.
+        self._audio_preroll_ms: int = 0
 
         # Poll playback position
         self._poll = QTimer(self)
@@ -137,6 +150,18 @@ class PlayerWidget(QWidget):
         else:
             self.play()
 
+    def _toggle_subtitles(self) -> None:
+        self._subs_enabled = self._sub_btn.isChecked()
+        if self._subs_enabled:
+            # Re-enable first subtitle track.
+            count = self._player.video_get_spu_count()
+            if count > 0:
+                descs = self._player.video_get_spu_description()
+                if descs and len(descs) > 1:
+                    self._player.video_set_spu(descs[1][0])
+        else:
+            self._player.video_set_spu(-1)
+
     # ---------- internal ----------
 
     def _duration_ms(self) -> int:
@@ -181,21 +206,26 @@ class PlayerWidget(QWidget):
     def _apply_filters(self, cur_ms: int) -> None:
         if self._profile is None:
             return
-        active = self._find_active_flag(cur_ms)
+        if not self._player.is_playing():
+            return
+        # Look ahead to compensate for audio output buffer latency.
+        check_ms = cur_ms + self._audio_preroll_ms
+        active = self._find_active_flag(check_ms)
         if active is None:
             if self._filter_muted:
                 self._restore_audio()
-                self._active_flag = None
+            self._active_flag = None
             return
-        if active is self._active_flag:
-            return  # already handling it
-        self._active_flag = active
         if active.action == "skip":
-            target = active.padded(self._profile.padding_ms)[1] + 10
-            self._player.set_time(int(target))
-            # No mute needed when skipping; just continue.
-        else:
-            self._player.audio_set_mute(True)
+            s, e = active.padded(self._profile.padding_ms)
+            self._player.set_time(int(e + 50))
+            self._active_flag = None
+        elif active is not self._active_flag:
+            self._active_flag = active
+            vol = self._player.audio_get_volume()
+            if vol > 0:
+                self._saved_volume = vol
+            self._player.audio_set_volume(0)
             self._filter_muted = True
             self._mute_indicator.setText(f"MUTED ({active.category})")
             self._mute_indicator.setVisible(True)
@@ -203,7 +233,6 @@ class PlayerWidget(QWidget):
     def _find_active_flag(self, cur_ms: int) -> Optional[Flag]:
         if self._profile is None:
             return None
-        # Linear scan — fine for thousands of flags. Could binary-search later.
         for f in self._profile.flags:
             if not f.enabled:
                 continue
@@ -215,7 +244,7 @@ class PlayerWidget(QWidget):
     def _restore_audio(self) -> None:
         if self._user_muted:
             return
-        self._player.audio_set_mute(False)
+        self._player.audio_set_volume(self._saved_volume)
         self._filter_muted = False
         self._mute_indicator.setVisible(False)
 

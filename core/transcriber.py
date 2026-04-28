@@ -2,23 +2,26 @@
 
 This module is *optional*. If faster-whisper isn't installed, `is_available()`
 returns False and the rest of the app falls back to subtitle-only scanning.
+
+Transcription runs in a **subprocess** to fully isolate the CUDA context from
+the main process (VLC + Qt). When the subprocess exits, all GPU memory is
+truly released with no risk of corrupting VLC's rendering state.
 """
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Optional
+from typing import Callable, Optional
 
 from .filter_engine import TextSegment, WordTiming
 
 
-# Default model size. Tradeoff:
-#   tiny    -  ~75 MB,   fastest, weakest
-#   base    - ~140 MB,   default
-#   small   - ~460 MB,   noticeably better
-#   medium  - ~1.5 GB,   strong
-#   large-v3 - ~3 GB,    best (requires GPU for tolerable speed)
-DEFAULT_MODEL = "base"
+DEFAULT_MODEL = "medium"
 
 
 def is_available() -> bool:
@@ -34,49 +37,121 @@ def transcribe(
     model_name: str = DEFAULT_MODEL,
     language: Optional[str] = None,
     progress_cb: Optional[Callable[[float], None]] = None,
-) -> Iterator[TextSegment]:
-    """Yield TextSegments with word-level timings as Whisper produces them.
+) -> list[TextSegment]:
+    """Transcribe audio in a subprocess and return TextSegments with word-level timings.
 
-    `progress_cb`, if given, is called with a float in [0.0, 1.0] roughly
-    representing how much of the audio has been transcribed.
+    Running in a subprocess ensures the CUDA context is fully destroyed when
+    transcription finishes, preventing native crashes in VLC.
     """
-    from faster_whisper import WhisperModel  # type: ignore
+    out_file = Path(tempfile.gettempdir()) / "subtitle_cleaner" / "_transcribe_result.json"
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    if out_file.exists():
+        out_file.unlink()
 
-    # Pick a reasonable default device. CPU is fine but slow on long videos.
-    # int8 quantization is much faster on CPU with minimal quality loss.
-    try:
-        model = WhisperModel(model_name, device="cuda", compute_type="float16")
-    except Exception:
-        model = WhisperModel(model_name, device="cpu", compute_type="int8")
-
-    segments_iter, info = model.transcribe(
+    # Build the subprocess command using the same Python interpreter.
+    cmd = [
+        sys.executable, "-u", "-c",
+        _SUBPROCESS_SCRIPT,
         str(audio_path),
-        language=language,
-        word_timestamps=True,
-        vad_filter=True,
-    )
-    duration = float(getattr(info, "duration", 0.0)) or 0.0
+        model_name,
+        language or "",
+        str(out_file),
+    ]
 
-    for seg in segments_iter:
-        words: list[WordTiming] = []
-        if getattr(seg, "words", None):
-            for w in seg.words:
-                if w.start is None or w.end is None:
-                    continue
-                words.append(
-                    WordTiming(
-                        word=str(w.word).strip(),
-                        start_ms=int(w.start * 1000),
-                        end_ms=int(w.end * 1000),
-                    )
-                )
-        ts = TextSegment(
-            start_ms=int(seg.start * 1000),
-            end_ms=int(seg.end * 1000),
-            text=str(seg.text).strip(),
+    # Add NVIDIA DLL paths to the subprocess environment.
+    env = os.environ.copy()
+    try:
+        import nvidia.cublas
+        import nvidia.cudnn
+        for pkg in (nvidia.cublas, nvidia.cudnn):
+            for base in pkg.__path__:
+                bin_dir = os.path.join(base, "bin")
+                if os.path.isdir(bin_dir):
+                    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+    except ImportError:
+        pass
+
+    proc = subprocess.Popen(
+        cmd, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace",
+    )
+
+    # Read progress lines from the subprocess.
+    for line in proc.stdout:
+        line = line.strip()
+        if line.startswith("PROGRESS:") and progress_cb:
+            try:
+                frac = float(line.split(":", 1)[1])
+                progress_cb(frac)
+            except ValueError:
+                pass
+
+    proc.wait()
+
+    if proc.returncode != 0 or not out_file.exists():
+        return []
+
+    # Parse results from the JSON file written by the subprocess.
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    results: list[TextSegment] = []
+    for seg in data:
+        words = [
+            WordTiming(word=w["word"], start_ms=w["start_ms"], end_ms=w["end_ms"])
+            for w in seg.get("words", [])
+        ]
+        results.append(TextSegment(
+            start_ms=seg["start_ms"],
+            end_ms=seg["end_ms"],
+            text=seg["text"],
             source="transcript",
             words=words,
+        ))
+    return results
+
+
+_SUBPROCESS_SCRIPT = r'''
+import sys, json
+
+audio_path = sys.argv[1]
+model_name = sys.argv[2]
+language = sys.argv[3] or None
+out_file = sys.argv[4]
+
+from faster_whisper import WhisperModel
+
+model = None
+segments_iter = None
+for device, compute in [("cuda", "float16"), ("cpu", "int8")]:
+    try:
+        model = WhisperModel(model_name, device=device, compute_type=compute)
+        segments_iter, info = model.transcribe(
+            audio_path,
+            language=language,
+            word_timestamps=True,
+            vad_filter=False,
         )
-        if progress_cb and duration > 0:
-            progress_cb(min(1.0, seg.end / duration))
-        yield ts
+        break
+    except Exception:
+        model = None
+        segments_iter = None
+
+if segments_iter is None:
+    sys.exit(1)
+
+duration = float(getattr(info, "duration", 0.0)) or 0.0
+results = []
+for seg in segments_iter:
+    words = []
+    if getattr(seg, "words", None):
+        for w in seg.words:
+            if w.start is None or w.end is None:
+                continue
+            words.append({"word": str(w.word).strip(), "start_ms": int(w.start * 1000), "end_ms": int(w.end * 1000)})
+    results.append({"start_ms": int(seg.start * 1000), "end_ms": int(seg.end * 1000), "text": str(seg.text).strip(), "words": words})
+    if duration > 0:
+        print("PROGRESS:" + str(min(1.0, seg.end / duration)), flush=True)
+
+with open(out_file, "w", encoding="utf-8") as f:
+    json.dump(results, f)
+'''

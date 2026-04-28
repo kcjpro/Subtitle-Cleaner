@@ -28,7 +28,8 @@ class ScanOptions:
     use_sidecar_subtitles: bool = True
     use_embedded_subtitles: bool = True
     use_transcription: bool = True
-    whisper_model: str = "base"
+    prefer_transcription: bool = True  # Whisper gives precise word-level timing
+    whisper_model: str = "medium"
     language: Optional[str] = None  # None = auto-detect
 
 
@@ -60,15 +61,21 @@ def scan_video(
     segments: list[TextSegment] = []
     used_source: Optional[str] = None
 
-    # --- 1. Sidecar subtitles ---
-    if options.use_sidecar_subtitles:
+    # When prefer_transcription is set and Whisper is available, try it first
+    # for accurate word-level timestamps. Fall back to subtitles otherwise.
+    if options.prefer_transcription and options.use_transcription:
+        segments, used_source = _try_transcription(
+            video_path, options, progress)
+
+    # --- Sidecar subtitles ---
+    if not segments and options.use_sidecar_subtitles:
         sidecar = subtitle_parser.find_sidecar_subtitle(video_path)
         if sidecar is not None:
             _emit(progress, f"Reading sidecar subtitles ({sidecar.name})…", 0.1)
             segments = subtitle_parser.parse_subtitle_file(sidecar)
             used_source = f"sidecar:{sidecar.name}"
 
-    # --- 2. Embedded subtitles ---
+    # --- Embedded subtitles ---
     if not segments and options.use_embedded_subtitles:
         if subtitle_extractor.has_ffmpeg():
             _emit(progress, "Looking for embedded subtitle tracks…", 0.15)
@@ -81,37 +88,10 @@ def scan_video(
                 segments = subtitle_parser.parse_subtitle_file(extracted)
                 used_source = f"embedded:{extracted.name}"
 
-    # --- 3. Audio transcription ---
-    if not segments and options.use_transcription:
-        if not transcriber.is_available():
-            _emit(progress,
-                  "faster-whisper not installed; skipping transcription.", 0.3)
-        elif not audio_extractor.has_ffmpeg():
-            _emit(progress, "ffmpeg not found; cannot extract audio.", 0.3)
-        else:
-            _emit(progress, "Extracting audio…", 0.3)
-            wav = audio_extractor.extract_wav(
-                video_path,
-                out_dir=Path(tempfile.gettempdir()) / "subtitle_cleaner",
-            )
-            if wav is not None:
-                _emit(progress, "Transcribing audio (this can take a while)…", 0.4)
-
-                def _whisper_progress(frac: float) -> None:
-                    # Map 0..1 transcription progress into 0.4..0.9 overall.
-                    _emit(progress,
-                          "Transcribing audio…",
-                          0.4 + frac * 0.5)
-
-                segments = list(
-                    transcriber.transcribe(
-                        wav,
-                        model_name=options.whisper_model,
-                        language=options.language,
-                        progress_cb=_whisper_progress,
-                    )
-                )
-                used_source = "whisper"
+    # --- Audio transcription (fallback when not preferred above) ---
+    if not segments and options.use_transcription and not options.prefer_transcription:
+        segments, used_source = _try_transcription(
+            video_path, options, progress)
 
     _emit(progress, "Matching against wordlists…", 0.92)
     flags = scan_segments(segments, wordlists)
@@ -120,6 +100,40 @@ def scan_video(
                     f"{len(segments)} segments, {len(flags)} flags."
     _emit(progress, profile.notes, 1.0)
     return profile
+
+
+def _try_transcription(
+    video_path: Path,
+    options: ScanOptions,
+    progress: Optional[ProgressCb],
+) -> tuple[list[TextSegment], Optional[str]]:
+    """Attempt Whisper transcription. Returns (segments, source_label)."""
+    if not transcriber.is_available():
+        _emit(progress,
+              "faster-whisper not installed; skipping transcription.", 0.3)
+        return [], None
+    if not audio_extractor.has_ffmpeg():
+        _emit(progress, "ffmpeg not found; cannot extract audio.", 0.3)
+        return [], None
+    _emit(progress, "Extracting audio…", 0.3)
+    wav = audio_extractor.extract_wav(
+        video_path,
+        out_dir=Path(tempfile.gettempdir()) / "subtitle_cleaner",
+    )
+    if wav is None:
+        return [], None
+    _emit(progress, "Transcribing audio (this can take a while)…", 0.4)
+
+    def _whisper_progress(frac: float) -> None:
+        _emit(progress, "Transcribing audio…", 0.4 + frac * 0.5)
+
+    segments = transcriber.transcribe(
+        wav,
+        model_name=options.whisper_model,
+        language=options.language,
+        progress_cb=_whisper_progress,
+    )
+    return segments, "whisper"
 
 
 def _emit(progress: Optional[ProgressCb], msg: str, frac: float) -> None:

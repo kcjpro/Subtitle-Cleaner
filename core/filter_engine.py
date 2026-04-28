@@ -13,7 +13,7 @@ from typing import Iterable, Sequence
 
 # Pad each flag by this many milliseconds on each side so cuts aren't audible
 # at the edges. Tweak in the UI later if needed.
-DEFAULT_PADDING_MS = 150
+DEFAULT_PADDING_MS = 250
 
 # Categories shipped by default. Each maps to a wordlist filename in data/wordlists/.
 CATEGORIES = ("blasphemy", "vulgarity", "sexual", "slurs")
