@@ -131,7 +131,13 @@ def is_frozen() -> bool:
 
 
 def user_data_dir() -> Path:
-    """Per-user, per-platform location for the extras venv + state."""
+    """Per-user, per-platform location for the extras venv + state.
+
+    Mirrors ``core.paths.get_user_data_root()`` but always returns the
+    OS-specific path even in source mode (so a developer running from
+    source still installs extras into a clean per-user location instead
+    of polluting the project tree).
+    """
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
         return Path(base) / "SubtitleCleaner"
@@ -232,23 +238,16 @@ def find_system_python() -> Optional[List[str]]:
 # ---------------------------------------------------------------------
 
 def _bundled_requirements_path(req_filename: str) -> Optional[Path]:
-    """Locate a requirements file shipped with the build."""
-    # Source mode: it's in the project root.
-    candidate = paths.get_app_root() / req_filename
+    """Locate a requirements file shipped with the build.
+
+    Both the Windows and Mac specs ship requirements-*.txt files at "."
+    which lands in PyInstaller's ``sys._MEIPASS`` (i.e. ``_internal/`` on
+    Windows or ``Contents/Resources/`` inside an .app on Mac). In source
+    mode the files sit in the project root.
+    """
+    candidate = paths.get_bundle_resource_root() / req_filename
     if candidate.exists():
         return candidate
-    # Frozen Mac .app: the spec puts it in Contents/Resources/.
-    if is_frozen() and sys.platform == "darwin":
-        exe_dir = Path(sys.executable).resolve().parent
-        if exe_dir.name == "MacOS":
-            res = exe_dir.parent / "Resources" / req_filename
-            if res.exists():
-                return res
-    # Frozen Windows: PyInstaller puts datas at "." next to _internal/.
-    if is_frozen():
-        candidate = Path(sys.executable).resolve().parent / req_filename
-        if candidate.exists():
-            return candidate
     return None
 
 

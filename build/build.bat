@@ -80,11 +80,6 @@ echo.
 
 if not "!PYI_RC!"=="0" goto :err
 
-REM Make sure the empty profiles folder ships with the bundle.
-if exist "dist\SubtitleCleaner" (
-    if not exist "dist\SubtitleCleaner\data\profiles" mkdir "dist\SubtitleCleaner\data\profiles"
-)
-
 REM Sanity check: did PyInstaller actually produce the exe?
 if not exist "dist\SubtitleCleaner\SubtitleCleaner.exe" (
     echo.

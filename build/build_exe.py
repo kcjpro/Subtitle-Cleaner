@@ -60,8 +60,6 @@ def main() -> int:
         cwd=HERE)
 
     dist = HERE / "dist" / "SubtitleCleaner"
-    profiles = dist / "data" / "profiles"
-    profiles.mkdir(parents=True, exist_ok=True)
 
     # Make sure libmpv-2.dll lands next to the exe (PyInstaller's bin-bundle
     # path can miss raw .dll drops if not pinned in the .spec).

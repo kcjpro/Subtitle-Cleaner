@@ -76,6 +76,9 @@ class AppSettings:
 
 
 def settings_path() -> Path:
+    """Path to settings.json. Lives in the writable user-data dir
+    (%LOCALAPPDATA%/SubtitleCleaner/data/ on a frozen Windows install)
+    so we never try to write inside Program Files."""
     return paths.get_data_dir() / SETTINGS_FILENAME
 
 

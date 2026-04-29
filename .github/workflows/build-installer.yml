@@ -83,11 +83,6 @@ jobs:
               Measure-Object Length -Sum |
               ForEach-Object { '{0:N1} MB' -f ($_.Sum / 1MB) }
 
-      - name: Ensure data/profiles directory ships in the bundle
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path 'build/dist/SubtitleCleaner/data/profiles' | Out-Null
-
       - name: Compile Inno Setup installer
         shell: cmd
         run: |

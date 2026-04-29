@@ -1,25 +1,51 @@
-"""Path resolution that works in both source mode and a frozen PyInstaller bundle.
+"""Path resolution that works in source mode and in a frozen PyInstaller bundle.
 
-Layout when frozen (one-folder build):
+We split paths into two roots:
 
-    SubtitleCleaner/
-        SubtitleCleaner.exe
-        _internal/...               # PyInstaller's bundled libraries
-        bin/
-            ffmpeg.exe              # if bundled at build time
-            ffprobe.exe
-        data/
-            wordlists/*.txt         # editable in place
-            profiles/*.json         # auto-created on first save
+  * **Bundle resource root** (read-only) holds `bin/` (libmpv + ffmpeg)
+    and `data/wordlists/`. PyInstaller >=6 packs these inside
+    `_internal/` (one-folder Windows/Linux) or `Contents/Resources/`
+    (Mac .app bundle). The runtime exposes that path as `sys._MEIPASS`.
 
-Layout in source mode:
+  * **User data root** (writable) holds `settings.json`, `profiles/`,
+    and the optional-features venv. Lives in a per-user OS-specific
+    location when frozen, or in the project root in source mode (so
+    `python main.py` keeps writing alongside your repo, like before).
 
-    <repo>/
-        main.py
-        core/paths.py               # this file
-        bin/                        # optional, mirrors frozen layout
-        data/wordlists/*.txt
-        data/profiles/*.json
+Layouts:
+
+    Source mode:
+        <repo>/
+            main.py
+            core/paths.py                       # this file
+            bin/                                # optional, mirrors frozen layout
+            data/
+                wordlists/*.txt
+                profiles/*.json                 # auto-created
+                settings.json                   # auto-created
+
+    Frozen one-folder Windows/Linux:
+        SubtitleCleaner/
+            SubtitleCleaner.exe                 # sys.executable
+            _internal/                          # sys._MEIPASS
+                bin/{libmpv-2.dll,ffmpeg.exe,...}
+                data/wordlists/*.txt
+                requirements-*.txt
+        %LOCALAPPDATA%/SubtitleCleaner/
+            data/{settings.json, profiles/...}
+            extras-env/                          # in-app installer venv
+
+    Frozen Mac .app bundle:
+        SubtitleCleaner.app/Contents/
+            MacOS/SubtitleCleaner                # sys.executable
+            Resources/                           # sys._MEIPASS
+                bin/{ffmpeg, ffprobe}
+                data/wordlists/*.txt
+                requirements-*.txt
+            Frameworks/libmpv.2.dylib
+        ~/Library/Application Support/SubtitleCleaner/
+            data/{settings.json, profiles/...}
+            extras-env/
 """
 
 from __future__ import annotations
@@ -36,45 +62,63 @@ def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
-def get_app_root() -> Path:
-    """Folder that holds editable resources (data/, bin/) next to the entry point.
+# ---------- Bundle resource root (read-only) ----------
 
-    Frozen one-folder build (Windows / Linux):
-        <dist>/SubtitleCleaner/
-            SubtitleCleaner.exe              <-- sys.executable
-            data/...
-            bin/...
-        => return the .exe's directory.
+def get_bundle_resource_root() -> Path:
+    """Where read-only resources shipped with the bundle live.
 
-    Frozen .app bundle (macOS):
-        SubtitleCleaner.app/Contents/
-            MacOS/SubtitleCleaner            <-- sys.executable
-            Resources/data/...
-            Resources/bin/...
-            Frameworks/libmpv.2.dylib
-        => return Contents/Resources/ so data and bin paths line up
-        with the Windows layout.
-
-    Source mode:
-        return the project root (parent of this file's core/ folder).
+    Frozen: ``sys._MEIPASS`` (`_internal/` on Win/Linux, `Contents/Resources/`
+    inside an .app on Mac).
+    Source: the project root.
     """
     if is_frozen():
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass)
+        # Fallback for older PyInstaller versions.
         exe_dir = Path(sys.executable).resolve().parent
-        # Mac .app bundle: MacOS/.. = Contents/, then Contents/Resources/.
         if sys.platform == "darwin" and exe_dir.name == "MacOS":
-            resources = exe_dir.parent / "Resources"
-            if resources.exists():
-                return resources
+            res = exe_dir.parent / "Resources"
+            if res.exists():
+                return res
         return exe_dir
     return Path(__file__).resolve().parent.parent
 
 
-def get_data_dir() -> Path:
-    return get_app_root() / "data"
+def get_bin_dir() -> Path:
+    """Read-only bundled binaries (libmpv, ffmpeg). Source: <repo>/bin/."""
+    return get_bundle_resource_root() / "bin"
 
 
 def get_wordlist_dir() -> Path:
-    p = get_data_dir() / "wordlists"
+    """Read-only wordlists. Never mkdir - they ship with the bundle."""
+    return get_bundle_resource_root() / "data" / "wordlists"
+
+
+# ---------- User data root (writable) ----------
+
+def get_user_data_root() -> Path:
+    """Per-user, writable directory for settings, profiles, extras-env.
+
+    Frozen Win:    %LOCALAPPDATA%/SubtitleCleaner/
+    Frozen Mac:    ~/Library/Application Support/SubtitleCleaner/
+    Frozen Linux:  ~/.local/share/SubtitleCleaner/
+    Source mode:   project root  (so dev runs keep using <repo>/data/)
+    """
+    if not is_frozen():
+        return Path(__file__).resolve().parent.parent
+
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(base) / "SubtitleCleaner"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "SubtitleCleaner"
+    return Path.home() / ".local" / "share" / "SubtitleCleaner"
+
+
+def get_data_dir() -> Path:
+    """Writable user data folder (settings.json + profiles/)."""
+    p = get_user_data_root() / "data"
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -85,8 +129,16 @@ def get_profiles_dir() -> Path:
     return p
 
 
-def get_bin_dir() -> Path:
-    return get_app_root() / "bin"
+# ---------- Backward-compat alias ----------
+
+def get_app_root() -> Path:
+    """Deprecated: prefer get_bundle_resource_root() for read-only resources or
+    get_user_data_root() for writable user data.
+
+    Returns the bundle resource root for back-compat with code that used this
+    to find shipped data.
+    """
+    return get_bundle_resource_root()
 
 
 # ---------- ffmpeg / ffprobe resolution ----------

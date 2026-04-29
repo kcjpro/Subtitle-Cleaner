@@ -87,12 +87,7 @@ if [ "$PYI_RC" != "0" ]; then
     exit 1
 fi
 
-# Make sure the empty profiles folder ships with the bundle.
 APP="$HERE/dist/SubtitleCleaner.app"
-if [ -d "$APP" ]; then
-    mkdir -p "$APP/Contents/Resources/data/profiles"
-fi
-
 if [ ! -d "$APP" ]; then
     echo "ERROR: PyInstaller exited 0 but did not produce $APP"
     echo "Folder contents of build/dist/:"

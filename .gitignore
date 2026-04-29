@@ -22,6 +22,9 @@ build/bin/ffprobe.exe
 build/bin/libmpv-2.dll
 build/bin_mac/
 
+# --- Build script output (interactive log of MAKE_INSTALLER.bat) ---
+build.log
+
 # --- Installer build deps + output (auto-downloaded; can be huge) ---
 installer/deps/libmpv-2.dll
 installer/deps/ffmpeg.exe
