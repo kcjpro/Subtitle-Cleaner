@@ -7,9 +7,10 @@ Run from the build/ folder:
 Result lands in build/dist/SubtitleCleaner/. Zip the folder to share.
 
 This build is intentionally subtitle-only. The transcription path
-(faster-whisper / ctranslate2 / onnxruntime) is excluded here because
-bundling it pulls in ~350 MB of fragile native deps. To use transcription,
-run the app from Python source after `pip install -r requirements-whisper.txt`.
+(faster-whisper / ctranslate2), the LLM SDKs, and NudeNet are excluded
+because bundling them pulls in ~1 GB of fragile native deps. To use those
+features, run the app from Python source after installing the relevant
+optional requirements files.
 """
 
 from pathlib import Path
@@ -22,9 +23,14 @@ PROJECT_ROOT = SPEC_DIR.parent
 
 binaries = []
 
-# If the user dropped ffmpeg.exe / ffprobe.exe into build/bin/, ship them.
+# If the user dropped ffmpeg.exe / ffprobe.exe / libmpv-2.dll into build/bin/,
+# ship them in the bundled bin/ folder so the runtime path resolution finds
+# them first.
 bin_dir = SPEC_DIR / "bin"
-for name in ("ffmpeg.exe", "ffprobe.exe", "ffmpeg", "ffprobe"):
+for name in (
+    "ffmpeg.exe", "ffprobe.exe", "ffmpeg", "ffprobe",
+    "libmpv-2.dll", "mpv-2.dll", "libmpv-1.dll",
+):
     src = bin_dir / name
     if src.exists():
         binaries.append((str(src), "bin"))
@@ -38,10 +44,18 @@ wordlist_src = PROJECT_ROOT / "data" / "wordlists"
 for txt in wordlist_src.glob("*.txt"):
     datas.append((str(txt), "data/wordlists"))
 
+# Ship the optional requirements files so the in-app feature installer
+# (Settings -> Optional Features) can pip-install them into a sibling
+# venv without rebuilding the app.
+for req in ("requirements-whisper.txt", "requirements-llm.txt", "requirements-visual.txt"):
+    req_path = PROJECT_ROOT / req
+    if req_path.exists():
+        datas.append((str(req_path), "."))
+
 # ---------- hidden imports ----------
 
 # Only the things the slim runtime actually needs.
-hiddenimports = ["vlc"]
+hiddenimports = ["mpv", "qtawesome"]
 
 # ---------- excludes ----------
 
@@ -54,12 +68,35 @@ excludes = [
     "ctranslate2",
     "onnxruntime",
     "onnx",
+    "nudenet",
     "huggingface_hub",
     "tokenizers",
     "transformers",
     "safetensors",
     "tensorboard",
     "tensorboardX",
+
+    # NVIDIA CUDA libraries (pulled in transitively by faster-whisper /
+    # torch / etc. on machines that have them installed). Each is
+    # 100-300 MB and we don't ship the GPU transcription stack anyway.
+    "nvidia",
+    "nvidia.cublas",
+    "nvidia.cudnn",
+    "nvidia.cuda_runtime",
+    "nvidia.cuda_nvrtc",
+    "nvidia.cuda_cupti",
+    "nvidia.cufft",
+    "nvidia.curand",
+    "nvidia.cusolver",
+    "nvidia.cusparse",
+    "nvidia.nccl",
+    "nvidia.nvjitlink",
+    "nvidia.nvtx",
+
+    # Cloud LLM SDKs (optional in source mode only).
+    "google",
+    "google.generativeai",
+    "groq",
 
     # Deep learning frameworks
     "torch",

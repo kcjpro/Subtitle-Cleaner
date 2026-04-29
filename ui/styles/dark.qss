@@ -1,0 +1,254 @@
+/* Subtitle Cleaner — hand-rolled dark theme.
+ * Designed to feel modern and quiet, not gamer-y. */
+
+QWidget {
+    background-color: #181a1f;
+    color: #e6e6e6;
+    font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+}
+
+QMainWindow, QDialog {
+    background-color: #15171c;
+}
+
+QToolBar {
+    background-color: #15171c;
+    border: none;
+    padding: 6px 10px;
+    spacing: 6px;
+}
+
+QToolBar QToolButton {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #e6e6e6;
+    min-height: 26px;
+}
+
+QToolBar QToolButton:hover {
+    background-color: #232730;
+    border-color: #2c313a;
+}
+
+QToolBar QToolButton:pressed,
+QToolBar QToolButton:checked {
+    background-color: #2c313a;
+    border-color: #3d4452;
+}
+
+QToolBar QToolButton:disabled {
+    color: #5d6675;
+}
+
+QPushButton {
+    background-color: #232730;
+    border: 1px solid #2c313a;
+    border-radius: 6px;
+    padding: 6px 14px;
+    color: #e6e6e6;
+}
+
+QPushButton:hover {
+    background-color: #2a2f3a;
+    border-color: #3d4452;
+}
+
+QPushButton:pressed {
+    background-color: #1f232c;
+}
+
+QPushButton:disabled {
+    color: #5d6675;
+    background-color: #1c1f25;
+    border-color: #232730;
+}
+
+QPushButton:default {
+    background-color: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+}
+
+QPushButton:default:hover {
+    background-color: #3275f5;
+    border-color: #3275f5;
+}
+
+QPushButton:default:pressed {
+    background-color: #1d4fbf;
+}
+
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+    background-color: #1f232c;
+    border: 1px solid #2c313a;
+    border-radius: 5px;
+    padding: 5px 8px;
+    color: #e6e6e6;
+    selection-background-color: #2563eb;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border-color: #4e83e8;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #2c313a;
+    border-radius: 3px;
+}
+
+QSlider::sub-page:horizontal {
+    background: #4e83e8;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: #ffffff;
+    border: 1px solid #4e83e8;
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: #d8e6ff;
+}
+
+QHeaderView::section {
+    background-color: #1f232c;
+    color: #b8c0cf;
+    padding: 6px 10px;
+    border: none;
+    border-right: 1px solid #2c313a;
+    border-bottom: 1px solid #2c313a;
+    font-weight: 600;
+}
+
+QTableWidget {
+    background-color: #181a1f;
+    alternate-background-color: #1c1f25;
+    gridline-color: #232730;
+    border: 1px solid #232730;
+    border-radius: 6px;
+}
+
+QTableWidget::item {
+    padding: 6px 8px;
+}
+
+QTableWidget::item:selected {
+    background-color: #284d8a;
+    color: #ffffff;
+}
+
+QStatusBar {
+    background-color: #15171c;
+    border-top: 1px solid #232730;
+    color: #b8c0cf;
+}
+
+QProgressBar {
+    background-color: #1f232c;
+    border: 1px solid #2c313a;
+    border-radius: 5px;
+    text-align: center;
+    color: #e6e6e6;
+}
+
+QProgressBar::chunk {
+    background-color: #4e83e8;
+    border-radius: 4px;
+}
+
+QTabWidget::pane {
+    border: 1px solid #232730;
+    border-radius: 6px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background-color: transparent;
+    color: #b8c0cf;
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    border-bottom: none;
+}
+
+QTabBar::tab:selected {
+    background-color: #1f232c;
+    color: #ffffff;
+    border-color: #232730;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+QCheckBox {
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #3d4452;
+    border-radius: 3px;
+    background: #1f232c;
+}
+
+QCheckBox::indicator:checked {
+    background: #2563eb;
+    border-color: #2563eb;
+    image: url(none);
+}
+
+QToolTip {
+    background-color: #2c313a;
+    color: #ffffff;
+    border: 1px solid #3d4452;
+    padding: 4px 6px;
+    border-radius: 4px;
+}
+
+/* The mute indicator on the player. */
+QLabel#muteIndicator {
+    color: white;
+    background-color: #c43f5b;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+/* Category chips used in the review dialog. */
+QLabel.categoryChip {
+    border-radius: 9px;
+    padding: 2px 10px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* Confidence bar in the review dialog. */
+QFrame#confidenceBar {
+    background-color: #2c313a;
+    border-radius: 3px;
+}
+
+QFrame#confidenceBar QFrame {
+    background-color: #4e83e8;
+    border-radius: 3px;
+}
+
+/* Section labels in the settings dialog. */
+QLabel[role="section"] {
+    color: #4e83e8;
+    font-weight: 700;
+    margin-top: 14px;
+    margin-bottom: 4px;
+}

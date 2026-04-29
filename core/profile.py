@@ -18,17 +18,22 @@ from typing import Optional
 from .filter_engine import Flag
 
 
+PROFILE_SCHEMA_VERSION = 2
+
+
 @dataclass
 class FilterProfile:
     video_path: str           # absolute path at time of scan (informational)
     video_size: int           # bytes (used in the key)
     duration_ms: int = 0
     flags: list[Flag] = field(default_factory=list)
-    padding_ms: int = 150     # padding added around each flag during playback
+    padding_ms: int = 250     # padding added around each flag during playback
     notes: str = ""
+    version: int = PROFILE_SCHEMA_VERSION
 
     def to_dict(self) -> dict:
         return {
+            "version": self.version,
             "video_path": self.video_path,
             "video_size": self.video_size,
             "duration_ms": self.duration_ms,
@@ -40,10 +45,11 @@ class FilterProfile:
     @classmethod
     def from_dict(cls, d: dict) -> "FilterProfile":
         return cls(
+            version=int(d.get("version", 1)),
             video_path=d.get("video_path", ""),
             video_size=int(d.get("video_size", 0)),
             duration_ms=int(d.get("duration_ms", 0)),
-            padding_ms=int(d.get("padding_ms", 150)),
+            padding_ms=int(d.get("padding_ms", 250)),
             notes=d.get("notes", ""),
             flags=[Flag.from_dict(f) for f in d.get("flags", [])],
         )

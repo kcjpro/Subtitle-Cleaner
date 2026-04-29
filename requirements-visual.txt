@@ -1,0 +1,12 @@
+# Optional: visual nudity detection via NudeNet.
+#
+# DO NOT install this in the same Python env you build the .exe from —
+# onnxruntime + the bundled NudeNet weights are large and make packaging fragile.
+#
+# Install with:
+#   pip install -r requirements-visual.txt
+#
+# For GPU inference, swap onnxruntime for onnxruntime-gpu (matching CUDA).
+
+nudenet>=3.4.2
+onnxruntime>=1.17.0

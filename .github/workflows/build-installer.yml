@@ -1,13 +1,13 @@
-# Build the SubtitleCleaner Windows installer in the cloud.
+# Build the SubtitleCleaner Windows installer + portable in the cloud.
 #
 # Triggers:
 #   - Every push to main / master
 #   - Manual run from the Actions tab (workflow_dispatch)
-#   - Every published release (also attaches the installer to the release)
+#   - Every published release (also attaches the artifacts to the release)
 #
 # Result:
 #   - SubtitleCleaner-Setup.exe (the one-click installer) uploaded as an artifact
-#   - SubtitleCleaner-Portable folder (the unwrapped bundle) uploaded as an artifact
+#   - SubtitleCleaner-Portable folder uploaded as an artifact
 #
 # Find both under the workflow run page once it finishes.
 
@@ -45,22 +45,22 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install pyinstaller
 
-      # python-vlc imports cleanly without VLC installed (it lazy-loads
-      # libvlc only when you actually call vlc.Instance()), so we don't
-      # install VLC on the runner. The installer carries VLC's own
-      # installer for the END USER's machine, which is what matters.
+      # python-mpv loads libmpv-2.dll lazily, so we don't need it on the
+      # build runner - only at runtime in the bundled .exe. The download
+      # step below grabs the DLL into installer/deps/ for bundling.
 
-      - name: Download VLC + ffmpeg into installer/deps
+      - name: Download libmpv-2.dll + ffmpeg into installer/deps
         shell: pwsh
         run: |
           ./installer/download_deps.ps1
 
-      - name: Mirror ffmpeg into build/bin so the spec bundles it
+      - name: Mirror libmpv + ffmpeg into build/bin so the spec bundles them
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path build/bin | Out-Null
-          Copy-Item installer/deps/ffmpeg.exe  build/bin/ffmpeg.exe  -Force
-          Copy-Item installer/deps/ffprobe.exe build/bin/ffprobe.exe -Force
+          Copy-Item installer/deps/ffmpeg.exe    build/bin/ffmpeg.exe    -Force
+          Copy-Item installer/deps/ffprobe.exe   build/bin/ffprobe.exe   -Force
+          Copy-Item installer/deps/libmpv-2.dll  build/bin/libmpv-2.dll  -Force
 
       - name: Run PyInstaller
         working-directory: build
@@ -73,6 +73,10 @@ jobs:
           $exe = 'build/dist/SubtitleCleaner/SubtitleCleaner.exe'
           if (-not (Test-Path $exe)) {
               throw "PyInstaller did not produce $exe"
+          }
+          $dll = 'build/dist/SubtitleCleaner/bin/libmpv-2.dll'
+          if (-not (Test-Path $dll)) {
+              throw "libmpv-2.dll did not land in the bundle at $dll"
           }
           Write-Host "Bundle size:"
           Get-ChildItem 'build/dist/SubtitleCleaner' -Recurse -File |
@@ -89,13 +93,25 @@ jobs:
         run: |
           "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" installer\SubtitleCleaner.iss
 
-      - name: Show installer size
+      - name: Zip portable bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path installer/Output | Out-Null
+          $zip = 'installer/Output/SubtitleCleaner-Portable.zip'
+          if (Test-Path $zip) { Remove-Item -Force $zip }
+          Compress-Archive -Path 'build/dist/SubtitleCleaner/*' `
+                           -DestinationPath $zip `
+                           -CompressionLevel Optimal
+
+      - name: Show artifact sizes
         shell: pwsh
         run: |
           $setup = 'installer/Output/SubtitleCleaner-Setup.exe'
+          $zip   = 'installer/Output/SubtitleCleaner-Portable.zip'
           if (-not (Test-Path $setup)) { throw "Inno Setup did not produce $setup" }
-          $sizeMB = (Get-Item $setup).Length / 1MB
-          Write-Host ("Installer: {0:N1} MB" -f $sizeMB)
+          if (-not (Test-Path $zip))   { throw "Portable zip not found at $zip" }
+          Write-Host ("Installer: {0:N1} MB" -f ((Get-Item $setup).Length / 1MB))
+          Write-Host ("Portable:  {0:N1} MB" -f ((Get-Item $zip).Length / 1MB))
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -111,8 +127,17 @@ jobs:
           path: build/dist/SubtitleCleaner/
           if-no-files-found: error
 
-      - name: Attach installer to release
+      - name: Upload portable zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubtitleCleaner-Portable-Zip
+          path: installer/Output/SubtitleCleaner-Portable.zip
+          if-no-files-found: error
+
+      - name: Attach artifacts to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/Output/SubtitleCleaner-Setup.exe
+          files: |
+            installer/Output/SubtitleCleaner-Setup.exe
+            installer/Output/SubtitleCleaner-Portable.zip

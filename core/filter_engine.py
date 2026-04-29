@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 # Pad each flag by this many milliseconds on each side so cuts aren't audible
 # at the edges. Tweak in the UI later if needed.
@@ -17,6 +17,27 @@ DEFAULT_PADDING_MS = 250
 
 # Categories shipped by default. Each maps to a wordlist filename in data/wordlists/.
 CATEGORIES = ("blasphemy", "vulgarity", "sexual", "slurs")
+
+# Categories produced by the LLM context classifier (no wordlist file).
+CONTEXT_CATEGORIES = ("sexual_situation", "crude_innuendo", "disturbing_content")
+
+# Categories produced by the visual scanner (NudeNet).
+VISUAL_CATEGORIES = ("nudity",)
+
+ALL_CATEGORIES = CATEGORIES + CONTEXT_CATEGORIES + VISUAL_CATEGORIES
+
+# Default mute/skip per category. Sexual + visual content defaults to "skip"
+# because muting a love scene is pointless; the visual content keeps playing.
+DEFAULT_ACTIONS: dict[str, str] = {
+    "blasphemy": "mute",
+    "vulgarity": "mute",
+    "sexual": "skip",
+    "slurs": "mute",
+    "sexual_situation": "skip",
+    "crude_innuendo": "mute",
+    "disturbing_content": "skip",
+    "nudity": "skip",
+}
 
 
 @dataclass
@@ -26,11 +47,16 @@ class Flag:
     start_ms: int                # zero-based offset from start of video
     end_ms: int
     word: str                    # the matched word/phrase as it appears
-    category: str                # one of CATEGORIES
+    category: str                # one of CATEGORIES / CONTEXT_CATEGORIES / VISUAL_CATEGORIES
     context: str = ""            # surrounding sentence/cue, for admin review
-    source: str = "transcript"   # "subtitle" | "transcript"
+    source: str = "transcript"   # "subtitle" | "transcript" | "llm_context" | "visual"
     action: str = "mute"         # "mute" | "skip"
     enabled: bool = True         # admin toggle
+
+    # v2 fields ---
+    flag_type: str = "audio"     # "audio" | "visual" — drives mute vs video-skip
+    confidence: Optional[float] = None  # 0..1 (LLM, visual); None for keyword
+    reason: str = ""             # why the LLM/visual scanner flagged it
 
     def padded(self, padding_ms: int = DEFAULT_PADDING_MS) -> tuple[int, int]:
         return (max(0, self.start_ms - padding_ms), self.end_ms + padding_ms)
@@ -40,7 +66,22 @@ class Flag:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Flag":
-        return cls(**d)
+        # Accept old profiles missing the v2 fields and fill defaults.
+        return cls(
+            start_ms=int(d.get("start_ms", 0)),
+            end_ms=int(d.get("end_ms", 0)),
+            word=str(d.get("word", "")),
+            category=str(d.get("category", "vulgarity")),
+            context=str(d.get("context", "")),
+            source=str(d.get("source", "transcript")),
+            action=str(d.get("action", "mute")),
+            enabled=bool(d.get("enabled", True)),
+            flag_type=str(d.get("flag_type", "audio")),
+            confidence=(
+                float(d["confidence"]) if d.get("confidence") is not None else None
+            ),
+            reason=str(d.get("reason", "")),
+        )
 
 
 @dataclass
@@ -129,13 +170,7 @@ def scan_segments(
     Returns a deduped, time-sorted list of Flag objects.
     """
     if default_action_by_category is None:
-        # Sexual content defaults to "skip"; everything else to "mute".
-        default_action_by_category = {
-            "blasphemy": "mute",
-            "vulgarity": "mute",
-            "sexual": "skip",
-            "slurs": "mute",
-        }
+        default_action_by_category = DEFAULT_ACTIONS
 
     flags: list[Flag] = []
     for seg in segments:

@@ -1,158 +1,182 @@
 # Subtitle Cleaner
 
-A standalone desktop video player that scans video files for profanity, blasphemy,
-and sexually explicit language, then mutes or skips flagged sections during playback.
+A standalone desktop video player that scans video files for profanity,
+blasphemy, sexually explicit language, and on-screen nudity, then mutes
+or skips flagged sections during playback.
 
 Inspired by ClearPlay. Designed for personal/family use.
 
-## Features (MVP)
+## Features
 
-- Plays MP4, MKV, AVI, MOV, and other formats supported by VLC.
-- Pre-scans the video for objectionable content using:
-  - **Embedded subtitles** in MKV files (extracted via ffmpeg).
+- Plays MP4, MKV, AVI, MOV, and other formats supported by mpv.
+- Pre-scans every video using a stack of detection sources, all of which
+  can be combined:
+  - **Embedded subtitles** in MKV/MP4 files (extracted via ffmpeg).
   - **Sidecar subtitle files** (`movie.srt`, `movie.vtt`) next to the video.
   - **Audio transcription** with [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-    when no subtitles are available (or when a thorough scan is requested).
-- Categorizes flagged words into **blasphemy**, **vulgarity**, **sexual**, and **slurs**
-  using editable word lists in `data/wordlists/`.
-- Admin **review dialog** lets a parent/admin enable/disable each flag before playback.
-- Saves a **filter profile** per video in `data/profiles/` so you only review once.
-- During playback, the player **mutes** or **skips** the chosen ranges automatically.
+    for word-level timestamps when no subtitles are available.
+  - **LLM context analysis** (Ollama / Gemini / Groq) to flag implied
+    sexual situations, innuendo, and disturbing dialogue beyond simple
+    wordlist matches.
+  - **Visual nudity detection** via [NudeNet](https://github.com/notAI-tech/NudeNet)
+    on sampled frames.
+- Categorizes flagged words into **blasphemy**, **vulgarity**, **sexual**,
+  and **slurs** using editable wordlists in `data/wordlists/`.
+- **Review dialog** with category summary cards, search/filter, type
+  badges (audio vs visual), and confidence indicators.
+- Saves a **filter profile** per video in `data/profiles/` so you only
+  review once.
+- During playback, mpv handles the video; the app watches the playback
+  position and **mutes** or **skips** the chosen ranges automatically.
+- Modern dark UI (qtawesome icons, hand-rolled QSS) with a frame-accurate
+  scrubber.
 
-## Future / Stubs
+## Quick start (click-to-run)
 
-- Visual nudity detection via [NudeNet](https://github.com/notAI-tech/NudeNet) on sampled frames.
-- LLM-based context classifier (e.g. distinguish "damn the torpedoes" from a curse).
-- Password-protected admin mode so only the admin can change filter settings.
+Grab the prebuilt artifacts from
+[GitHub Releases](https://github.com/kcjpro/Subtitle-Cleaner/releases) or
+build them yourself (below).
 
-## Requirements
+| Platform | Format | Size |
+|----------|--------|------|
+| Windows  | `SubtitleCleaner-Setup.exe`        | ~120 MB |
+| Windows  | `SubtitleCleaner-Portable.zip`     | ~165 MB |
+| macOS    | `SubtitleCleaner.dmg`              | similar |
+| macOS    | `SubtitleCleaner-mac.zip` (portable .app) | similar |
 
-- Windows, macOS, or Linux
-- [VLC media player](https://www.videolan.org/) installed (provides codecs + playback engine)
-- [FFmpeg](https://ffmpeg.org/) on PATH (for audio + subtitle extraction)
-- Python 3.10+
+The click-to-run app ships with `libmpv` + `ffmpeg` + `ffprobe` bundled,
+so end users do **not** need to install VLC, mpv, ffmpeg, or anything
+else separately.
 
-## Install (source mode)
+The slim build covers subtitle scanning + playback. The heavier optional
+features (Whisper, NudeNet, cloud LLM SDKs) are installed on-demand from
+**Settings -> Optional Features** in the running app — no rebuild
+needed.
+
+## Run from source
+
+For development / faster iteration:
 
 ```bash
 pip install -r requirements.txt
-```
-
-That gives you the **subtitle-only** scanner (sidecar `.srt`/`.vtt` and
-embedded MKV subtitle tracks). Optional: enable audio transcription for
-videos with no subtitles at all:
-
-```bash
-pip install -r requirements-whisper.txt
-```
-
-The first time you transcribe, faster-whisper downloads a model (~140 MB
-for `base`). Tune the model in `core/transcriber.py`.
-
-## Run
-
-```bash
 python main.py
 ```
 
-Open a video, click **Scan**, review flags in the admin dialog, then click **Play**.
+You'll need:
 
-## Build a one-click Windows installer
+- Python 3.10-3.12 (3.12 recommended)
+- mpv / libmpv on the system:
+  - **Windows:** drop `libmpv-2.dll` into `bin/` next to `main.py`
+  - **macOS:** `brew install mpv ffmpeg`
+  - **Linux:** `apt install libmpv2 ffmpeg`
+- ffmpeg + ffprobe on PATH (or in `bin/` next to `main.py`)
 
-There are two ways to produce `SubtitleCleaner-Setup.exe`:
+Optional features:
 
-### Option A — let GitHub build it for you (recommended)
+```bash
+pip install -r requirements-whisper.txt   # faster-whisper transcription
+pip install -r requirements-llm.txt       # Gemini + Groq SDKs
+pip install -r requirements-visual.txt    # NudeNet + onnxruntime
+```
 
-Push the project to a free GitHub repo. The included
-[`.github/workflows/build-installer.yml`](.github/workflows/build-installer.yml)
-spins up a clean Windows VM, builds the bundle, runs Inno Setup, and
-hands you `SubtitleCleaner-Setup.exe` as a downloadable artifact from
-the **Actions** tab. No local build environment needed.
+## Build the installers locally
 
-Full walkthrough: [`.github/README.md`](.github/README.md).
-
-### Option B — build it locally on Windows
+### Windows
 
 ```bat
 MAKE_INSTALLER.bat
 ```
 
-The script downloads ffmpeg + the latest VLC installer, builds the slim
-PyInstaller bundle, and wraps it all in an Inno Setup installer at
-`installer\Output\SubtitleCleaner-Setup.exe` (~120 MB).
+Downloads `libmpv-2.dll` + `ffmpeg.exe` + `ffprobe.exe` automatically,
+runs PyInstaller, compiles the Inno Setup installer, and zips the
+portable bundle. Outputs land in `installer\Output\`.
 
-One-time setup on the build machine: Python 3.10–3.12 and
-[Inno Setup](https://jrsoftware.org/isdl.php) (free, ~5 MB).
+One-time prerequisites: Python 3.10-3.12,
+[Inno Setup](https://jrsoftware.org/isdl.php) (free, ~5 MB), and
+[7-Zip](https://www.7-zip.org/) (free, ~2 MB; Inno Setup's installer
+ships it). Full walkthrough: [build/README.md](build/README.md).
 
-See `installer\README.md` for the full installer story.
+### macOS
 
-### Either way
-
-The end-user double-clicks `SubtitleCleaner-Setup.exe` → wizard → done.
-The wizard installs Subtitle Cleaner, creates Start Menu shortcuts, and
-silently installs VLC if it's not already present.
-
-### Just want the .exe folder, not an installer?
-
-```bat
-build\build.bat
+```bash
+bash scripts/setup_mac.sh           # one-time: brew, python@3.12, mpv, ffmpeg, ...
+bash MAKE_INSTALLER.command          # full build
 ```
 
-Produces a portable `build\dist\SubtitleCleaner\` folder (~50–80 MB)
-that you can zip and share. VLC must be installed separately on the
-target machine. See `build\README.md`.
+`setup_mac.sh` is idempotent and only installs what's missing. Full
+walkthrough: [docs/MAC_BUILD.md](docs/MAC_BUILD.md).
 
-The bundled .exe is **subtitle-only** by design — `faster-whisper` and
-its native deps don't bundle cleanly with PyInstaller. For transcription,
-run from source.
+### GitHub Actions (cloud builds)
+
+Push to a GitHub repo and the bundled
+[`.github/workflows/build-installer.yml`](.github/workflows/build-installer.yml)
+spins up a clean Windows runner, builds, and uploads
+`SubtitleCleaner-Setup.exe` and `SubtitleCleaner-Portable.zip` as
+artifacts. (Mac builds via CI are out of scope until macOS runners are
+added.)
 
 ## Project layout
 
 ```
 SubtitleCleaner/
-├── main.py                 # Entry point
-├── requirements.txt
+├── main.py                          # Entry point
+├── requirements.txt                  # PySide6 + python-mpv + qtawesome
+├── requirements-whisper.txt          # optional: faster-whisper
+├── requirements-llm.txt              # optional: google-generativeai + groq
+├── requirements-visual.txt           # optional: nudenet + onnxruntime
 ├── core/
-│   ├── paths.py            # source vs frozen-build path resolution
-│   ├── scanner.py          # Orchestrates the scan
-│   ├── audio_extractor.py  # ffmpeg wrapper to pull WAV audio
-│   ├── subtitle_extractor.py  # extract embedded subs from MKV
-│   ├── subtitle_parser.py  # parse .srt / .vtt
-│   ├── transcriber.py      # faster-whisper wrapper (word timestamps)
-│   ├── filter_engine.py    # match transcript/subs against word lists
-│   └── profile.py          # save/load per-video filter profiles
+│   ├── paths.py                     # source vs frozen-build path resolution
+│   ├── scanner.py                   # orchestrates the scan
+│   ├── audio_extractor.py           # ffmpeg wrapper to pull WAV audio
+│   ├── subtitle_extractor.py        # extract embedded subs from MKV
+│   ├── subtitle_parser.py           # parse .srt / .vtt
+│   ├── transcriber.py               # faster-whisper subprocess wrapper
+│   ├── llm_classifier.py            # LLM context analysis orchestrator
+│   ├── llm/                         # Ollama / Gemini / Groq backends
+│   ├── visual_scanner.py            # NudeNet subprocess wrapper
+│   ├── filter_engine.py             # match results against wordlists
+│   ├── profile.py                   # save/load per-video filter profiles
+│   ├── settings.py                  # JSON-persisted user preferences
+│   └── feature_installer.py         # in-app installer for optional ML deps
 ├── data/
-│   ├── wordlists/          # editable text files, one word per line
-│   └── profiles/           # auto-generated JSON profiles
+│   ├── wordlists/                   # editable text files, one word per line
+│   └── profiles/                    # auto-generated JSON profiles
 ├── ui/
-│   ├── main_window.py      # Open/Scan/Review/Play
-│   ├── scan_dialog.py      # progress dialog
-│   ├── review_dialog.py    # flag table with on/off toggles
-│   └── player_widget.py    # VLC playback + mute scheduling
+│   ├── main_window.py               # Open/Scan/Review/Play toolbar
+│   ├── scan_dialog.py               # progress dialog
+│   ├── review_dialog.py             # category cards + flag table
+│   ├── settings_dialog.py           # Scan / Player / Appearance / Features
+│   ├── player_widget.py             # mpv playback + mute/skip scheduling
+│   ├── theme.py + styles/dark.qss   # dark theme
+│   └── icons.py                     # qtawesome icon helpers
 ├── build/
-│   ├── SubtitleCleaner.spec  # PyInstaller spec
-│   ├── build.bat             # one-click Windows build
-│   ├── build_exe.py          # cross-platform build script
-│   ├── bin/                  # drop ffmpeg.exe + ffprobe.exe here to bundle
-│   └── README.md             # build instructions
+│   ├── SubtitleCleaner.spec         # Windows PyInstaller spec
+│   ├── SubtitleCleanerMac.spec      # macOS .app bundle spec
+│   ├── build.bat                    # Windows one-click PyInstaller
+│   ├── build_mac.sh                 # macOS one-click PyInstaller
+│   └── bin/, bin_mac/               # auto-populated bundle binaries
 ├── installer/
-│   ├── SubtitleCleaner.iss   # Inno Setup script (with VLC detection)
-│   ├── download_deps.ps1     # auto-fetches VLC + ffmpeg
-│   ├── deps/                 # auto-populated; or drop installers here manually
-│   └── README.md             # installer instructions
-├── .github/
-│   ├── workflows/build-installer.yml  # cloud build (Windows runner)
-│   └── README.md             # GitHub Actions setup walkthrough
-├── MAKE_INSTALLER.bat        # one-click full pipeline → setup.exe (local build)
-└── docs/USAGE.md
+│   ├── SubtitleCleaner.iss          # Inno Setup script
+│   ├── download_deps.ps1            # Windows: libmpv + ffmpeg
+│   ├── download_deps_mac.sh         # macOS: brew + dylibbundler
+│   └── build_dmg.sh                 # macOS: create-dmg
+├── scripts/
+│   └── setup_mac.sh                 # one-time Mac setup walkthrough
+├── .github/workflows/build-installer.yml   # cloud build
+├── MAKE_INSTALLER.bat               # Windows one-click full pipeline
+├── MAKE_INSTALLER.command           # macOS one-click full pipeline
+└── docs/
+    ├── USAGE.md
+    └── MAC_BUILD.md
 ```
 
 ## How filtering works
 
-Each flag is a record of `(start_time, end_time, word, category, action)` where
-`action` is `mute` (default) or `skip`. During playback the player polls the
-current position; when it enters a flag's range it either mutes audio or seeks
-past the range. When the range ends, audio is restored.
+Each flag is `(start_ms, end_ms, word, category, action, flag_type, confidence, reason)`.
+`action` is `mute` (default for audio) or `skip` (default for visual).
+`flag_type` is `audio` or `visual`. During playback the player observes
+mpv's `time-pos` property and either mutes audio (via mpv's buffer-aware
+`mute` property) or seeks past the range when the position enters a flag.
 
-A small **padding** (default 150 ms) is applied around each flag so the cut
-isn't audible at the edges. Adjust in `core/filter_engine.py`.
+A small **padding** (default 250 ms) is applied around each flag so the
+cut isn't audible at the edges. Adjust in `core/filter_engine.py`.

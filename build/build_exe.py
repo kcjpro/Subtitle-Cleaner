@@ -3,12 +3,12 @@
 Run from anywhere:
     python build/build_exe.py
 
-Same workflow as build.bat — produces the slim, subtitle-only bundle.
-See build/README.md for the full story.
+Same workflow as build.bat. See build/README.md for the full story.
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,28 +24,35 @@ def run(cmd: list, cwd: Path | None = None) -> None:
 
 
 def main() -> int:
-    print("=== Subtitle Cleaner build (slim, subtitle-only) ===\n")
+    print("=== Subtitle Cleaner build ===\n")
 
     run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
     run([sys.executable, "-m", "pip", "install",
          "-r", str(PROJECT / "requirements.txt")])
     run([sys.executable, "-m", "pip", "install", "pyinstaller"])
 
-    print("\nNOTE: This build does NOT include faster-whisper (audio")
-    print("      transcription). The .exe scans subtitles only. To use")
-    print("      transcription, run from source:")
+    print("\nNOTE: This build does NOT include faster-whisper, NudeNet, or the")
+    print("      cloud LLM SDKs. The .exe scans subtitles only by default.")
+    print("      To enable those features, run from source:")
     print("        pip install -r requirements-whisper.txt")
+    print("        pip install -r requirements-llm.txt")
+    print("        pip install -r requirements-visual.txt")
     print("        python main.py")
 
     bin_dir = HERE / "bin"
-    bundled = [n for n in ("ffmpeg.exe", "ffprobe.exe", "ffmpeg", "ffprobe")
-               if (bin_dir / n).exists()]
+    bundled = [
+        n for n in (
+            "ffmpeg.exe", "ffprobe.exe", "ffmpeg", "ffprobe",
+            "libmpv-2.dll", "mpv-2.dll", "libmpv-1.dll",
+        ) if (bin_dir / n).exists()
+    ]
     if bundled:
         print(f"\nBundling from build/bin/: {', '.join(bundled)}")
     else:
-        print("\nNOTE: drop ffmpeg(.exe) and ffprobe(.exe) into build/bin/")
-        print("      to bundle them. Otherwise the built app falls back to")
-        print("      whatever ffmpeg is on the user's PATH.")
+        print("\nNOTE: drop the following into build/bin/ to bundle them:")
+        print("        ffmpeg(.exe), ffprobe(.exe)  <- audio + subtitle extraction")
+        print("        libmpv-2.dll                <- video playback engine")
+        print("      Otherwise the built app falls back to whatever's on PATH.")
 
     print("\nRunning PyInstaller...")
     run([sys.executable, "-m", "PyInstaller",
@@ -55,6 +62,15 @@ def main() -> int:
     dist = HERE / "dist" / "SubtitleCleaner"
     profiles = dist / "data" / "profiles"
     profiles.mkdir(parents=True, exist_ok=True)
+
+    # Make sure libmpv-2.dll lands next to the exe (PyInstaller's bin-bundle
+    # path can miss raw .dll drops if not pinned in the .spec).
+    dist_bin = dist / "bin"
+    dist_bin.mkdir(exist_ok=True)
+    for name in ("libmpv-2.dll", "mpv-2.dll", "libmpv-1.dll"):
+        src = bin_dir / name
+        if src.exists():
+            shutil.copy2(src, dist_bin / name)
 
     exe_name = "SubtitleCleaner.exe" if sys.platform == "win32" else "SubtitleCleaner"
     print("\n" + "=" * 60)

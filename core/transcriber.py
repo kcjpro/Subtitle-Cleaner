@@ -58,18 +58,21 @@ def transcribe(
         str(out_file),
     ]
 
-    # Add NVIDIA DLL paths to the subprocess environment.
+    # Add NVIDIA DLL paths to the subprocess environment, if the user
+    # has installed faster-whisper's GPU stack. We import the nvidia.*
+    # packages indirectly via importlib so PyInstaller's static analyzer
+    # does NOT pull these (huge) CUDA wheels into the slim bundle.
     env = os.environ.copy()
-    try:
-        import nvidia.cublas
-        import nvidia.cudnn
-        for pkg in (nvidia.cublas, nvidia.cudnn):
-            for base in pkg.__path__:
-                bin_dir = os.path.join(base, "bin")
-                if os.path.isdir(bin_dir):
-                    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
-    except ImportError:
-        pass
+    import importlib
+    for pkg_name in ("nvidia.cublas", "nvidia.cudnn"):
+        try:
+            pkg = importlib.import_module(pkg_name)
+        except ImportError:
+            continue
+        for base in getattr(pkg, "__path__", []):
+            bin_dir = os.path.join(base, "bin")
+            if os.path.isdir(bin_dir):
+                env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
 
     proc = subprocess.Popen(
         cmd, env=env,

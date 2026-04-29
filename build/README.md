@@ -2,85 +2,97 @@
 
 A one-folder portable build via [PyInstaller](https://pyinstaller.org/).
 The result is a `SubtitleCleaner` folder containing `SubtitleCleaner.exe`
-plus its supporting files. Zip it to share. Bundle weighs ~50–80 MB.
+plus its supporting files. Zip it to share. Bundle weighs ~120-180 MB
+(varies a bit with which libmpv build you grab).
 
 ## What this build includes (and what it doesn't)
 
-This is a **slim, subtitle-only** build. It scans:
+This is the **slim portable** build. It ships:
+
+- `SubtitleCleaner.exe`                 (the app)
+- `bin/libmpv-2.dll`                    (video playback engine)
+- `bin/ffmpeg.exe` + `bin/ffprobe.exe`  (audio + subtitle extraction)
+- `data/wordlists/*.txt`                (editable in place)
+
+It scans:
 
 - Sidecar subtitles (`movie.srt` / `movie.vtt` next to the video).
-- Subtitle tracks embedded in MKV files, extracted via ffmpeg.
+- Subtitle tracks embedded in MKV/MP4 files, extracted via ffmpeg.
 
-It does **not** include `faster-whisper` audio transcription. That stack
-(`ctranslate2` + `onnxruntime`) adds ~350 MB and a lot of fragile native
-dependencies that don't bundle cleanly. The PyInstaller spec actively
-*excludes* it even if you happen to have it installed in your env.
+It does **not** bundle the heavy optional features:
 
-If you need transcription (i.e. for videos with no subtitle track at all),
-run the app from Python source instead:
+- `faster-whisper` audio transcription (~350 MB native deps)
+- `nudenet` visual nudity detection (~200 MB onnxruntime + weights)
+- Cloud LLM SDKs (`google-generativeai`, `groq`)
+
+Users opt in to those at runtime from the in-app **Settings -> Optional
+Features** tab, which pip-installs them into a per-user environment
+without rebuilding the app. Or, run the app from Python source after:
 
 ```bat
 pip install -r requirements-whisper.txt
+pip install -r requirements-llm.txt
+pip install -r requirements-visual.txt
 python main.py
 ```
 
-In practice, virtually all movies and TV episodes you'd run this against
-already have an embedded or sidecar subtitle track, so the slim build covers
-the common case.
+The PyInstaller spec actively *excludes* these heavy packages even if
+they happen to be installed in your build env, so the bundle stays slim
+regardless.
 
 ## Prerequisites
 
 - Windows 10 / 11
-- Python 3.10+ on PATH
-- VLC media player installed on the **target** machine — `python-vlc` binds
-  to it at runtime. Don't try to bundle VLC; install it as a separate app
-  from <https://www.videolan.org/>.
+- Python 3.10-3.12 on PATH (3.12 recommended; PySide6 wheels for 3.13/3.14
+  occasionally lag the release).
+- [Inno Setup 6](https://jrsoftware.org/isdl.php) (free, ~5 MB) if you want
+  the `SubtitleCleaner-Setup.exe` installer too. The portable build does
+  not need Inno Setup.
 
-If your dev env happens to have `faster-whisper` / `ctranslate2` /
-`onnxruntime` installed, the spec excludes them, but uninstalling them
-before building will speed up PyInstaller's analysis pass and quiet the
-"missing modules" noise:
+End users do **not** need anything pre-installed (no VLC, no mpv, no
+Python). The bundle is self-contained.
+
+## One-click build (recommended)
+
+From the project root, double-click or run:
 
 ```bat
-pip uninstall -y faster-whisper ctranslate2 onnxruntime
+MAKE_INSTALLER.bat
 ```
 
-## Optional: bundle ffmpeg
+This will:
 
-If you drop `ffmpeg.exe` and `ffprobe.exe` into `build\bin\`, the build
-script will copy them next to the .exe so the app works on machines that
-don't have ffmpeg installed. See `build\bin\README.txt` for download links.
+1. Download `libmpv-2.dll`, `ffmpeg.exe`, `ffprobe.exe` into
+   `installer\deps\` (skipped on subsequent runs).
+2. Mirror them into `build\bin\` so the spec bundles them.
+3. Run PyInstaller to produce `build\dist\SubtitleCleaner\`.
+4. Compile the Inno Setup installer.
+5. Zip the portable bundle.
 
-If you skip this, the built app will look for ffmpeg/ffprobe on the user's
-PATH at runtime instead.
+Outputs land in `installer\Output\`:
 
-## Build
+- `SubtitleCleaner-Setup.exe`     (one-click installer)
+- `SubtitleCleaner-Portable.zip`  (unzip + double-click)
 
-From the repo root, double-click or run:
+## Just the portable build (no installer)
+
+Drop `libmpv-2.dll`, `ffmpeg.exe`, and `ffprobe.exe` into `build\bin\`,
+then run:
 
 ```bat
 build\build.bat
 ```
 
-Or, if you prefer Python:
-
-```bat
-python build\build_exe.py
-```
-
-The build script will:
-
-1. Install/update `pip`, the slim runtime requirements, and PyInstaller.
-2. Run `pyinstaller --noconfirm --clean SubtitleCleaner.spec`.
-3. Make sure `dist\SubtitleCleaner\data\profiles\` exists.
+(or `python build\build_exe.py` if you prefer).
 
 Final output:
 
 ```
 build\dist\SubtitleCleaner\
     SubtitleCleaner.exe
-    _internal\...                 (PyInstaller's bundled libs — leave alone)
-    bin\ffmpeg.exe                (only if you bundled it)
+    _internal\...                 (PyInstaller's bundled libs - leave alone)
+    bin\libmpv-2.dll              (video playback)
+    bin\ffmpeg.exe                (subtitle / audio extraction)
     bin\ffprobe.exe
     data\wordlists\*.txt          (editable in place)
     data\profiles\                (auto-populated as you scan videos)
@@ -91,7 +103,7 @@ Zip the `SubtitleCleaner` folder to ship a portable build.
 ## Customising the exe
 
 - **Icon:** put an `.ico` file somewhere and set `icon=` in
-  `SubtitleCleaner.spec` (`exe = EXE(... icon="path/to/icon.ico")`).
+  [SubtitleCleaner.spec](SubtitleCleaner.spec) (`exe = EXE(... icon="path/to/icon.ico")`).
 - **Console window for debugging:** flip `console=False` to `console=True`
   in the spec, rebuild. Stdout/stderr (including any Python tracebacks)
   will then show in a console.
@@ -103,10 +115,9 @@ import. Set `console=True` in the spec, rebuild, run from a terminal, and
 read the traceback. Add the missing module name to the `hiddenimports`
 list near the bottom of the spec.
 
-**VLC errors / no video shown** — VLC isn't installed on the target
-machine, or it's a 32-bit / 64-bit mismatch with the Python that built the
-exe. The Python interpreter you build with and the installed VLC must be
-the same architecture (both 64-bit is the norm).
+**"python-mpv could not be loaded" / black video pane** — `libmpv-2.dll`
+isn't next to the exe under `bin\`. Drop it there and re-launch. The
+MAKE_INSTALLER.bat workflow handles this automatically.
 
 **Lots of "missing module" warnings during build** — those are PyInstaller
 diagnostic noise, not errors. Most are platform-specific modules

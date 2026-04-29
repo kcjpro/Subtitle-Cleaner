@@ -2,7 +2,7 @@
 setlocal ENABLEDELAYEDEXPANSION
 cd /d "%~dp0"
 
-echo === Subtitle Cleaner build (slim, subtitle-only) ===
+echo === Subtitle Cleaner build (slim portable, mpv playback) ===
 echo.
 
 where python >nul 2>nul
@@ -17,8 +17,8 @@ python -c "import sys; print('  ' + sys.version)"
 python -c "import sys; ver=sys.version_info; sys.exit(0 if ver < (3,13) else 1)" >nul 2>nul
 if errorlevel 1 (
     echo.
-    echo WARNING: Python 3.13+ is bleeding-edge. Many wheels (especially
-    echo          native ones for PySide6 / faster-whisper) lag the release
+    echo WARNING: Python 3.13+ is bleeding-edge. Many wheels ^(especially
+    echo          native ones for PySide6 / faster-whisper^) lag the release
     echo          by months. If the build fails or the .exe won't launch,
     echo          install Python 3.12 from https://www.python.org/ and try
     echo          again from a fresh venv:
@@ -36,18 +36,30 @@ python -m pip install pyinstaller
 if errorlevel 1 goto :err
 
 echo.
-echo NOTE: This build does NOT include faster-whisper (audio transcription).
-echo       The bundled .exe scans subtitles only (sidecar .srt/.vtt and
-echo       embedded MKV subtitle tracks). Most movies and TV episodes have
-echo       embedded subtitles, so this covers the common case.
-echo       To use transcription, run from source:
+echo NOTE: This build is the slim default. It bundles libmpv-2.dll +
+echo       ffmpeg/ffprobe so playback and subtitle scanning work out of
+echo       the box. It does NOT bundle the heavy optional features
+echo       ^(faster-whisper, NudeNet, cloud LLM SDKs^); users opt in to
+echo       those from the in-app Settings -^> Optional Features tab,
+echo       or run from source after installing:
 echo           pip install -r requirements-whisper.txt
-echo           python main.py
+echo           pip install -r requirements-llm.txt
+echo           pip install -r requirements-visual.txt
 echo.
 
-if exist "bin\ffmpeg.exe" (
-    echo Bundling ffmpeg.exe from build\bin
+set "MISSING="
+if exist "bin\libmpv-2.dll" (
+    echo Bundling libmpv-2.dll from build\bin
 ) else (
+    set "MISSING=1"
+    echo NOTE: build\bin\libmpv-2.dll not found.
+    echo       Without it, video playback will not work.
+    echo       The MAKE_INSTALLER.bat driver downloads this for you.
+)
+if exist "bin\ffmpeg.exe" (
+    echo Bundling ffmpeg.exe + ffprobe.exe from build\bin
+) else (
+    set "MISSING=1"
     echo NOTE: build\bin\ffmpeg.exe not found.
     echo       Drop ffmpeg.exe and ffprobe.exe in there to bundle them.
     echo       Without them, the built app falls back to your system ffmpeg.

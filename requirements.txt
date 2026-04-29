@@ -1,14 +1,13 @@
-# --- Required runtime deps for the slim subtitle-only build ---
-# This is what the bundled .exe ships with.
+# --- Required runtime deps ---
 PySide6>=6.6.0
 
-# Video playback. Requires VLC installed system-wide on the target machine
-# (https://www.videolan.org/). python-vlc just binds to it.
-python-vlc>=3.0.20
+# Video playback. Requires libmpv-2.dll bundled in <app>/bin/ on Windows
+# (or libmpv shipped via the OS package manager on Linux/macOS).
+python-mpv>=1.0.5
+
+# Scalable icon set (Font Awesome inside Qt) for toolbar / control buttons.
+qtawesome>=1.3
 
 # --- Optional ---
-# Audio transcription via faster-whisper.
-# DO NOT install when building the .exe — it pulls in ctranslate2 + onnxruntime
-# (~350 MB) and makes packaging fragile.
-# To enable transcription in source mode only:
-#   pip install -r requirements-whisper.txt
+# See requirements-whisper.txt, requirements-llm.txt, requirements-visual.txt
+# for the heavier optional dependencies.
